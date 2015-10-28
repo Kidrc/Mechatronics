@@ -1,0 +1,28 @@
+#ifndef HODOR_GYRO_H
+#define HODOR_GYRO_H
+/*
+ * PINOUT:
+ * SDA2-PORTX03
+ * SCL2-PORTX06
+ */
+
+#define GYRO_I2C_ADDRESS 0x68
+#define GYRO_I2C_FREQUENCY 100000
+#define GYRO_I2C_MODULE I2C2
+
+#define GYRO_SCALE 500
+
+#define GYRO_REG_SMPRT_DIV 25
+#define GYRO_REG_CONFIG 26
+#define GYRO_REG_GYRO_CONFIG 27
+#define GYRO_REG_ZOUT_H 71
+#define GYRO_REG_ZOUT_L 72
+#define GYRO_REG_PWR_MGMT1 107
+#define GYRO_REG_WHOAMI 117
+
+void Gyro_Init(void);
+
+int Gyro_ReadZ(void);
+
+
+#endif

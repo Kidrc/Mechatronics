@@ -1,0 +1,25 @@
+build/default/production/main.o:  \
+main.c  \
+drivers/hodor_gyro.h  \
+ drivers/hodor_sensors.h  \
+library/include/IO_Ports.h  \
+ library/include/BOARD.h  \
+library/include/AD.h  \
+drivers/hodor_mech.h  \
+ library/include/RC_Servo.h  \
+drivers/hodor_motors.h  \
+library/include/pwm.h  \
+ drivers/hodor_battery.h  \
+statemachines/toplevel.h  \
+ library/include/ES_Configure.h  \
+statemachines/TimerList.h  \
+ library/include/ES_Framework.h  \
+statemachines/AlignReverse.h  \
+ statemachines/ReturnCenter.h  \
+statemachines/SearchCastle.h  \
+ statemachines/Rotate.h  \
+statemachines/TimerList.h  \
+ ../I2CTest.X/globalmacros.h  \
+library/include/LED.h  \
+globalmacros.h  \
+ library/include/serial.h 

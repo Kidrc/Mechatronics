@@ -1,0 +1,370 @@
+static const int ccw90_L= -100;
+static const int ccw90_R = 100;
+static const int ccw90_Time = 1000;
+
+static const int forward_curve_r_L = 200;
+static const int forward_curve_r_R = 200;
+static const int forward_curve_r_Time = 100;
+
+static const int curve_reverse_L = -200;
+static const int curve_reverse_R = -100;
+static const int curve_reverse_Time = 500;
+
+static const int reverse_L = -100;
+static const int reverse_R = -100;
+static const int reverse_Time = 500;
+
+static const int fork_Time = 500;
+
+static const int forward_L = 200;
+static const int forward_R = 200;
+
+
+#include "ES_Configure.h"
+#include "ES_Framework.h"
+#include "BOARD.h"
+
+#include "Secondlevel.h"
+
+#define RETRIEVE_CROWN_ENUMFORM(STATE) RETRIEVE_CROWN_##STATE,
+
+#define LIST_OF_RETRIEVE_CROWN_STATES(STATE)\
+    STATE(FORWARD_CURVE_R)\
+    STATE(CURVE_REVERSE)\
+    STATE(FORWARD_1ST)\
+    STATE(FORWARD_2ND)\
+    STATE(CCW_1ST)\
+    STATE(CCW_2ND)\
+    STATE(LOWER_FORK)\
+    STATE(REVERSE_1ST)\
+    STATE(REVERSE_2ND)\
+    STATE(LIFT_FORK)\
+
+typedef enum
+{
+    INIT_RETRIEVE_CROWN_STATE, LIST_OF_RETRIEVE_CROWN_STATES(RETRIEVE_CROWN_ENUMFORM)
+}SubRetrieveCrown_t;
+
+static SubRetrieveCrown_t currentState;
+
+uint8_t RETRIEVE_CROWN_InitSubHSM(void)
+{
+    ES_Event returnEvent;
+
+    currentState = INIT_RETRIEVE_CROWN_STATE;
+    returnEvent = RETRIEVE_CROWN_RunSubHSM(INIT_EVENT);
+
+    return returnEvent.EventType == ES_NO_EVENT;
+}
+
+ES_Event RETRIEVE_CROWN_RunSubHSM(ES_Event ThisEvent)
+{
+    uint8_t makeTransition = FALSE;
+    SubRetrieveCrown_t nextState;
+    static int acceleration = 0;
+
+    switch(ThisEvent.EventType)
+    {
+        case INIT_RETRIEVE_CROWN_STATE:
+            if(ThisEvent.EventType == ES_INIT)
+            {
+                currentState = RETRIEVE_CROWN_FORWARD_CURVE_R;
+                ThisEvent.EventType = ES_NO_EVENT;
+            }
+            break;
+
+        case RETRIEVE_CROWN_CCW_1ST:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(ccw90_L);
+                        Motor_RightSpeed(ccw90_R);
+
+                        ES_Timer_InitTimer(HSM_TIMER, ccw90_Time);
+                        break;
+
+                    case ES_TIMEOUT:
+                        nextState = RETRIEVE_CROWN_FORWARD_CURVE_R;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_FORWARD_CURVE_R:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(forward_curve_r_L);
+                        Motor_RightSpeed(forward_curve_r_R);
+
+                        ES_Timer_InitTimer(HSM_TIMER, forward_curve_r_Time);
+                        acceleration = 0;
+                        break;
+
+                    case ES_EXIT:
+                        ES_Timer_StopTimer(HSM_TIMER);
+                        break;
+
+
+                    case ES_TIMEOUT:
+                        acceleration += 50;
+
+                        Motor_LeftSpeed(forward_curve_r_L+acceleration);
+                        Motor_RightSpeed(forward_curve_r_R-acceleration);
+
+                        ES_Timer_InitTimer(HSM_TIMER, forward_curve_r_Time);
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    case BUMPED:
+#define BUMPER(PARA) ThisEvent.EventParam & PARA
+                        if (BUMPER(BUMPER_FRONT_LEFT) || BUMPER(BUMPER_FRONT_RIGHT))
+                        {
+                            nextState = RETRIEVE_CROWN_CCW_1ST;
+                            makeTransition = TRUE;
+
+                            ThisEvent.EventType = ES_NO_EVENT;
+                        }
+                        else if (BUMPER(BUMPER_NOTCH))
+                        {
+                            nextState = RETRIEVE_CROWN_REVERSE_1ST;
+                            makeTransition = TRUE;
+
+                            ThisEvent.EventType = ES_NO_EVENT;
+                        }
+                        else if (BUMPER(BUMPER_RIGHT))
+                        {
+                            nextState = RETRIEVE_CROWN_CURVE_REVERSE;
+                            makeTransition = TRUE;
+
+                            ThisEvent.EventType = ES_NO_EVENT;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_CURVE_REVERSE:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(curve_reverse_L);
+                        Motor_RightSpeed(curve_reverse_R);
+
+                        ES_Timer_InitTimer(HSM_TIMER, curve_reverse_Time);
+                        break;
+
+                    case ES_TIMEOUT:
+                        nextState = RETRIEVE_CROWN_FORWARD_CURVE_R;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_REVERSE_1ST:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(reverse_L);
+                        Motor_RightSpeed(reverse_R);
+
+                        ES_Timer_InitTimer(HSM_TIMER, reverse_Time);
+                        break;
+
+                    case ES_EXIT:
+                        Motor_LeftSpeed(0);
+                        Motor_RightSpeed(0);
+                        break;
+
+                    case ES_TIMEOUT:
+                        nextState = RETRIEVE_CROWN_LOWER_FORK;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_LOWER_FORK:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        ES_Timer_InitTimer(HSM_TIMER, fork_Time);
+                        Mech_Grabber(GRAB_DOWN);
+                        break;
+
+                    case ES_TIMEOUT:
+                        nextState = RETRIEVE_CROWN_FORWARD_1ST;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_FORWARD_1ST:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(forward_L);
+                        Motor_RightSpeed(forward_R);
+                        break;
+
+                    case ES_EXIT:
+                        Motor_LeftSpeed(0);
+                        Motor_RightSpeed(0);
+                        break;
+
+                    case BUMPED:
+                        nextState = RETRIEVE_CROWN_LIFT_FORK;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_LIFT_FORK:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        ES_Timer_InitTimer(HSM_TIMER, fork_Time);
+                        Mech_Grabber(GRAB_UP);
+                        break;
+
+                    case ES_TIMEOUT:
+                        nextState = RETRIEVE_CROWN_REVERSE_2ND;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_REVERSE_2ND:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(reverse_L);
+                        Motor_RightSpeed(reverse_R);
+
+                        ES_Timer_InitTimer(HSM_TIMER, reverse_Time);
+                        break;
+
+                    case ES_TIMEOUT:
+                        nextState = RETRIEVE_CROWN_CCW_2ND;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_CCW_2ND:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(ccw90_L);
+                        Motor_RightSpeed(ccw90_R);
+
+                        ES_Timer_InitTimer(HSM_TIMER, ccw90_Time);
+                        break;
+
+                    case ES_TIMEOUT:
+                        nextState = RETRIEVE_CROWN_FORWARD_2ND;
+                        makeTransition = TRUE;
+
+                        ThisEvent.EventType = ES_NO_EVENT;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        case RETRIEVE_CROWN_FORWARD_2ND:
+            if (ThisEvent.EventType != ES_NO_EVENT)
+            {
+                switch(ThisEvent.EventType)
+                {
+                    case ES_ENTRY:
+                        Motor_LeftSpeed(forward_L);
+                        Motor_RightSpeed(forward_R);
+                        break;
+
+                    case BUMPED:
+                        ThisEvent.EventType = GOT_CROWN;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    if (makeTransition)
+    {
+        RETRIEVE_CROWN_RunSubHSM(EXIT_EVENT);
+        currentState = nextState;
+        RETRIEVE_CROWN_RunSubHSM(ENTRY_EVENT);
+    }
+}
